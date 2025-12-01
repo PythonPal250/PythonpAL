@@ -6,17 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Python Pal</title>
 
-    <!-- Tailwind CSS -->
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Highlight.js (syntax highlighting) -->
+    <!-- Highlight.js styles & script -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
     />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
-    <!-- Tailwind Theme Customization -->
     <script>
       tailwind.config = {
         theme: {
@@ -36,16 +35,17 @@
       };
     </script>
 
-    <!-- Importmap for CDN Modules -->
+    <!-- Import map (if you still want it) -->
     <script type="importmap">
       {
         "imports": {
           "react": "https://aistudiocdn.com/react@^19.2.0",
           "react/": "https://aistudiocdn.com/react@^19.2.0/",
-          "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+          "vite": "https://aistudiocdn.com/vite@^7.2.4",
+          "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+          "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
           "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-          "marked": "https://aistudiocdn.com/marked@^17.0.1",
-          "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
+          "marked": "https://aistudiocdn.com/marked@^17.0.1"
         }
       }
     </script>
@@ -56,7 +56,7 @@
   <body class="bg-primary">
     <div id="root"></div>
 
-    <!-- FIXED: Only ONE valid entry point -->
+    <!-- ✅ Only ONE entry script, pointing to src/index.tsx -->
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>
