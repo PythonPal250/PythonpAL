@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -6,10 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Python Pal</title>
 
-    <!-- Tailwind -->
+    <!-- Tailwind (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Highlight.js styles & script -->
+    <!-- Highlight.js for code blocks -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
@@ -21,28 +21,23 @@
         theme: {
           extend: {
             colors: {
-              primary: "#0D1117",
-              secondary: "#161B22",
-              accent: "#2F81F7",
-              "text-primary": "#C9D1D9",
-              "text-secondary": "#8B949E",
-              "border-color": "#30363D",
-              "green-accent": "#238636",
-              "purple-accent": "#8957E5",
+              primary: '#0D1117',
+              secondary: '#161B22',
+              accent: '#2F81F7',
+              'text-primary': '#C9D1D9',
+              'text-secondary': '#8B949E',
+              'border-color': '#30363D',
+              'green-accent': '#238636',
+              'purple-accent': '#8957E5',
             },
           },
         },
       };
     </script>
-
-    <!-- Optional global CSS (Vite will just warn if missing) -->
-    <link rel="stylesheet" href="/index.css" />
   </head>
-
   <body class="bg-primary">
     <div id="root"></div>
-
-    <!-- ✅ Only ONE entry script, using the bundled code -->
+    <!-- Single Vite entrypoint. Vite replaces this with the built bundle. -->
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>
