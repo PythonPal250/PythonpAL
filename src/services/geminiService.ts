@@ -1,29 +1,23 @@
 import { GoogleGenAI } from "@google/genai";
-import {
-  Message,
-  Job,
-  Project,
-  Challenge,
-  EvaluationResult,
-  Language,
-} from "../types";
+import type { Message, Job, Project, Challenge, EvaluationResult, Language } from "../types";
 
-// -----------------
-// Client setup
-// -----------------
+// Guard for missing API key
 if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+  // At build/runtime this will show clearly in console if the env var is missing
+  console.warn("API_KEY environment variable is not set. Gemini calls will fail until you configure it.");
 }
 
-// Vite will inline this at build time using define() in vite.config.ts
+// Create a single client instance
 const ai = new GoogleGenAI({
-  apiKey: process.env.API_KEY as string,
+  // In Vite, this will be inlined from define() in vite.config.ts
+  apiKey: process.env.API_KEY,
 });
 
-const getModelName = (isThinkingMode: boolean) =>
-  isThinkingMode ? "gemini-2.5-pro" : "gemini-2.5-flash";
+// Helper to choose model
+const getModelName = (thinking: boolean) =>
+  thinking ? "gemini-2.5-pro" : "gemini-2.5-flash";
 
-// Convert our Message[] history into Gemini "contents"
+// Convert our internal Message[] to Gemini contents format
 function buildContents(history: Message[]) {
   return history.map((msg) => ({
     role: msg.role,
@@ -38,9 +32,9 @@ function buildContents(history: Message[]) {
   }));
 }
 
-// -----------------
-// 1) Chat streaming
-// -----------------
+/**
+ * Streaming chat response – used by App.tsx
+ */
 export async function* getChatResponseStream(
   prompt: string,
   history: Message[],
@@ -48,54 +42,57 @@ export async function* getChatResponseStream(
   image?: { mimeType: string; data: string },
   isThinkingMode: boolean = false,
 ): AsyncGenerator<string, void, unknown> {
-  const model = getModelName(isThinkingMode);
+  try {
+    const model = getModelName(isThinkingMode);
 
-  const baseContents = buildContents(history);
-  const contents = [
-    ...baseContents,
-    {
-      role: "user",
-      parts: [
-        { text: prompt },
-        ...(image
-          ? [
-              {
-                inlineData: {
-                  mimeType: image.mimeType,
-                  data: image.data,
+    const contents = [
+      ...buildContents(history),
+      {
+        role: "user" as const,
+        parts: [
+          { text: prompt },
+          ...(image
+            ? [
+                {
+                  inlineData: {
+                    mimeType: image.mimeType,
+                    data: image.data,
+                  },
                 },
-              },
-            ]
-          : []),
-      ],
-    },
-  ];
+              ]
+            : []),
+        ],
+      },
+    ];
 
-  const config: Record<string, any> = {
-    systemInstruction,
-  };
-  if (isThinkingMode) {
-    config.thinkingConfig = { thinkingBudget: 32768 };
-  }
+    const config: any = { systemInstruction };
+    if (isThinkingMode) {
+      config.thinkingConfig = { thinkingBudget: 32768 };
+    }
 
-  const response = await ai.models.generateContent({
-    model,
-    contents,
-    config,
-  });
+    const response = await ai.models.generateContent({
+      model,
+      contents,
+      config,
+    });
 
-  const fullText = (response.text ?? "").toString();
-  // Fake "streaming" by yielding in word-ish chunks
-  const chunks = fullText.split(/(\s+)/);
-  for (const chunk of chunks) {
-    if (!chunk) continue;
-    yield chunk;
+    const fullText = (response.text ?? "").toString();
+    const chunks = fullText.split(/(\s+)/);
+
+    for (const chunk of chunks) {
+      if (!chunk) continue;
+      yield chunk;
+    }
+  } catch (err) {
+    console.error("Error in getChatResponseStream:", err);
+    // Yield a friendly error message instead of crashing the UI
+    yield "⚠️ Sorry, I ran into a problem talking to Gemini. Please check your API key and try again.";
   }
 }
 
-// -----------------
-// 2) Project ideas
-// -----------------
+/**
+ * Generate project ideas – used by ProjectsView via App.tsx
+ */
 export async function findProjects(
   history: Message[],
   systemInstruction: string,
@@ -107,13 +104,20 @@ export async function findProjects(
     const contents = [
       ...buildContents(history),
       {
-        role: "user",
+        role: "user" as const,
         parts: [
           {
-            text:
-              `Based on our conversation about my ${language} skills and interests, ` +
-              `generate 12 project ideas in JSON:\n` +
-              `{\n  "projects": [\n    {\n      "title": "...",\n      "description": "...",\n      "skills": ["..."],\n      "difficulty": "Beginner|Intermediate|Advanced"\n    }\n  ]\n}`,
+            text: `Based on our conversation and my ${language} skills, generate 12 project ideas as pure JSON in this shape:
+{
+  "projects": [
+    {
+      "title": "string",
+      "description": "string",
+      "skills": ["string"],
+      "difficulty": "Beginner" | "Intermediate" | "Advanced"
+    }
+  ]
+}`,
           },
         ],
       },
@@ -125,21 +129,21 @@ export async function findProjects(
       config: { systemInstruction },
     });
 
-    const jsonText = (response.text ?? "{}").toString();
-    const parsed = JSON.parse(jsonText);
-    return parsed.projects ?? [];
+    const json = (response.text ?? "{}").toString();
+    const parsed = JSON.parse(json);
+    return (parsed.projects ?? []) as Project[];
   } catch (err) {
     console.error("Error in findProjects:", err);
     return [];
   }
 }
 
-// -----------------
-// 3) Job search links
-// -----------------
-export function getJobSearchLinks(language: Language): {
-  [category: string]: { name: string; url: string }[];
-} {
+/**
+ * Job search helper links – used by JobsView
+ */
+export function getJobSearchLinks(
+  language: Language,
+): Record<string, { name: string; url: string }[]> {
   const encoded = encodeURIComponent(language);
 
   return {
@@ -179,7 +183,7 @@ export function getJobSearchLinks(language: Language): {
         url: `https://www.workingnomads.com/jobs?category=${encoded.toLowerCase()}`,
       },
     ],
-    "Tech-Specific Platforms": [
+    "Tech-Specific Boards": [
       {
         name: "Dice",
         url: `https://www.dice.com/jobs?q=${encoded}`,
@@ -189,16 +193,16 @@ export function getJobSearchLinks(language: Language): {
         url: `https://wellfound.com/role/${encoded.toLowerCase()}-developer`,
       },
       {
-        name: "StackOverflow Jobs (archive / links)",
+        name: "Stack Overflow Jobs (archive)",
         url: `https://stackoverflow.com/jobs?q=${encoded}`,
       },
     ],
   };
 }
 
-// -----------------
-// 4) Coding challenge
-// -----------------
+/**
+ * Coding challenge – used by GameView
+ */
 export async function getCodingChallenge(
   language: Language,
 ): Promise<Challenge> {
@@ -206,16 +210,16 @@ export async function getCodingChallenge(
     const model = "gemini-2.5-flash";
 
     const prompt = `
-You are a helpful coding tutor.
+You are a fun coding tutor.
+Create one intermediate ${language} coding challenge.
 
-Generate a fun, intermediate difficulty coding challenge for ${language}.
-Return ONLY valid JSON in this exact shape:
+Return ONLY valid JSON in this format:
 
 {
   "title": "string",
-  "description": "markdown description, can contain lists and code blocks",
-  "exampleInput": "string - a sample input",
-  "exampleOutput": "string - the correct output for that input"
+  "description": "markdown string explaining the task",
+  "exampleInput": "string",
+  "exampleOutput": "string"
 }
 `;
 
@@ -224,23 +228,23 @@ Return ONLY valid JSON in this exact shape:
       contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
 
-    const jsonText = (response.text ?? "{}").toString();
-    return JSON.parse(jsonText) as Challenge;
+    const json = (response.text ?? "{}").toString();
+    return JSON.parse(json) as Challenge;
   } catch (err) {
     console.error("Error in getCodingChallenge:", err);
     return {
       title: "Challenge unavailable",
       description:
-        "I couldn't fetch a new challenge right now. Please try again in a moment.",
+        "I couldn't generate a new challenge right now. Please try again in a moment!",
       exampleInput: "",
       exampleOutput: "",
-    } as Challenge;
+    };
   }
 }
 
-// -----------------
-// 5) Evaluate solution
-// -----------------
+/**
+ * Evaluate user's solution – used by GameView
+ */
 export async function evaluateCodeSolution(
   challenge: Challenge,
   userCode: string,
@@ -257,17 +261,17 @@ Title: ${challenge.title}
 Description:
 ${challenge.description}
 
-User's code (in ${language}):
+User's code:
 \`\`\`${language.toLowerCase()}
 ${userCode}
 \`\`\`
 
-Return ONLY JSON in this shape:
+Return ONLY JSON in this format:
 
 {
   "isCorrect": boolean,
-  "simulatedOutput": "string - what the program would print OR the error",
-  "feedback": "friendly markdown explanation and suggestions"
+  "simulatedOutput": "string - what the program would print OR the error message",
+  "feedback": "string - detailed friendly feedback in markdown"
 }
 `;
 
@@ -276,22 +280,22 @@ Return ONLY JSON in this shape:
       contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
 
-    const jsonText = (response.text ?? "{}").toString();
-    return JSON.parse(jsonText) as EvaluationResult;
+    const json = (response.text ?? "{}").toString();
+    return JSON.parse(json) as EvaluationResult;
   } catch (err) {
     console.error("Error in evaluateCodeSolution:", err);
     return {
       isCorrect: false,
-      simulatedOutput: "An error occurred while evaluating your code.",
+      simulatedOutput: "An internal error occurred while evaluating the code.",
       feedback:
-        "I ran into an internal issue while checking your solution. Please try again!",
-    } as EvaluationResult;
+        "I wasn't able to check your code this time. Please try again in a moment!",
+    };
   }
 }
 
-// -----------------
-// 6) Scan for input()
-// -----------------
+/**
+ * Analyze code for input() prompts – used by IDEView
+ */
 export async function scanForInputRequirements(
   userCode: string,
   language: Language,
@@ -305,7 +309,8 @@ Analyze this ${language} code and detect any user input prompts.
 Return ONLY JSON like:
 { "prompts": ["Enter your name:", "Enter age:"] }
 
-If there are no prompts, return: { "prompts": [] }
+If there are no prompts, return:
+{ "prompts": [] }
 
 Code:
 \`\`\`${language.toLowerCase()}
@@ -318,8 +323,8 @@ ${userCode}
       contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
 
-    const jsonText = (response.text ?? '{"prompts":[]}').toString();
-    const parsed = JSON.parse(jsonText) as { prompts: string[] };
+    const json = (response.text ?? '{"prompts":[]}').toString();
+    const parsed = JSON.parse(json) as { prompts?: string[] };
     return parsed.prompts ?? [];
   } catch (err) {
     console.error("Error in scanForInputRequirements:", err);
@@ -327,9 +332,9 @@ ${userCode}
   }
 }
 
-// -----------------
-// 7) Run code (simulated)
-// -----------------
+/**
+ * Simulate running user code – used by IDEView
+ */
 export async function runCode(
   userCode: string,
   language: Language,
@@ -341,8 +346,8 @@ export async function runCode(
     const prompt = `
 You are a ${language} code interpreter.
 
-Execute the following code mentally and return ONLY what would appear on stdout.
-If there is a runtime/compile error, return ONLY the error message.
+Execute the code mentally and return ONLY what would appear on stdout.
+If there is a compile/runtime error, return ONLY the error message.
 Do NOT add explanations or extra text.
 
 Standard input (stdin):
@@ -363,13 +368,13 @@ ${userCode}
     return text || "[No output]";
   } catch (err) {
     console.error("Error in runCode:", err);
-    return "An error occurred while trying to run the code.";
+    return "An internal error occurred while trying to run the code.";
   }
 }
 
-// -----------------
-// 8) Code completions
-// -----------------
+/**
+ * Code completion suggestions – used by IDEView
+ */
 export async function getCodeCompletions(
   userCode: string,
   language: Language,
@@ -378,7 +383,7 @@ export async function getCodeCompletions(
   try {
     const model = "gemini-2.5-flash";
 
-    const codeWithMarker =
+    const codeWithCursor =
       userCode.slice(0, cursorPosition) +
       "[CURSOR]" +
       userCode.slice(cursorPosition);
@@ -388,7 +393,7 @@ You are an autocomplete engine for ${language}.
 
 Code (with [CURSOR] marker):
 \`\`\`${language.toLowerCase()}
-${codeWithMarker}
+${codeWithCursor}
 \`\`\`
 
 Return ONLY JSON like:
@@ -402,26 +407,11 @@ Max 5 suggestions.
       contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
 
-    const jsonText = (response.text ?? '{"suggestions":[]}').toString();
-    const parsed = JSON.parse(jsonText) as { suggestions: string[] };
+    const json = (response.text ?? '{"suggestions":[]}').toString();
+    const parsed = JSON.parse(json) as { suggestions?: string[] };
     return parsed.suggestions ?? [];
   } catch (err) {
     console.error("Error in getCodeCompletions:", err);
     return [];
   }
 }
-// ADD THIS at the bottom of geminiService.ts
-
-export const getJobSearchLinks = (language: Language) => {
-  const encodedLang = encodeURIComponent(language);
-
-  return [
-    { name: "LinkedIn Jobs", url: `https://www.linkedin.com/jobs/search/?keywords=${encodedLang}%20Developer` },
-    { name: "Indeed", url: `https://www.indeed.com/jobs?q=${encodedLang}+Developer` },
-    { name: "RemoteOK", url: `https://remoteok.com/remote-${encodedLang}-jobs` },
-    { name: "We Work Remotely", url: `https://weworkremotely.com/remote-jobs/search?term=${encodedLang}` },
-    { name: "Dice", url: `https://www.dice.com/jobs?q=${encodedLang}` },
-    { name: "SimplyHired", url: `https://www.simplyhired.com/search?q=${encodedLang}+Developer` }
-  ];
-};
-
