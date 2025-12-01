@@ -1,28 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import {
-  Message,
-  Job,
-  Project,
-  Challenge,
-  EvaluationResult,
-  Language,
-  DebugResult,
-  LintIssue,
-} from "../types";
 
-// 🔹 Use Vite-style env var (works in browser & Vercel)
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+// Vite-style env var (works in browser + Vercel)
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 
 if (!apiKey) {
   throw new Error("VITE_GEMINI_API_KEY environment variable not set");
 }
 
-// 🔹 Create the client with the key
 const ai = new GoogleGenAI({ apiKey });
 
 const _getGenerativeModel_ = (isThinkingMode: boolean) => {
   return isThinkingMode ? "gemini-2.5-pro" : "gemini-2.5-flash";
 };
+
 
 export const getChatResponse = async (
   prompt: string,
