@@ -410,3 +410,18 @@ Max 5 suggestions.
     return [];
   }
 }
+// ADD THIS at the bottom of geminiService.ts
+
+export const getJobSearchLinks = (language: Language) => {
+  const encodedLang = encodeURIComponent(language);
+
+  return [
+    { name: "LinkedIn Jobs", url: `https://www.linkedin.com/jobs/search/?keywords=${encodedLang}%20Developer` },
+    { name: "Indeed", url: `https://www.indeed.com/jobs?q=${encodedLang}+Developer` },
+    { name: "RemoteOK", url: `https://remoteok.com/remote-${encodedLang}-jobs` },
+    { name: "We Work Remotely", url: `https://weworkremotely.com/remote-jobs/search?term=${encodedLang}` },
+    { name: "Dice", url: `https://www.dice.com/jobs?q=${encodedLang}` },
+    { name: "SimplyHired", url: `https://www.simplyhired.com/search?q=${encodedLang}+Developer` }
+  ];
+};
+
