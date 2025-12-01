@@ -5,45 +5,58 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Python Pal</title>
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+
+    <!-- Highlight.js (syntax highlighting) -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- Tailwind Theme Customization -->
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              'primary': '#0D1117',
-              'secondary': '#161B22',
-              'accent': '#2F81F7',
-              'text-primary': '#C9D1D9',
-              'text-secondary': '#8B949E',
-              'border-color': '#30363D',
-              'green-accent': '#238636',
-              'purple-accent': '#8957E5',
-            }
-          }
+              primary: "#0D1117",
+              secondary: "#161B22",
+              accent: "#2F81F7",
+              "text-primary": "#C9D1D9",
+              "text-secondary": "#8B949E",
+              "border-color": "#30363D",
+              "green-accent": "#238636",
+              "purple-accent": "#8957E5",
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- Importmap for CDN Modules -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://aistudiocdn.com/react@^19.2.0",
+          "react/": "https://aistudiocdn.com/react@^19.2.0/",
+          "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+          "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+          "marked": "https://aistudiocdn.com/marked@^17.0.1",
+          "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
         }
       }
     </script>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "marked": "https://aistudiocdn.com/marked@^17.0.1"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+
   <body class="bg-primary">
     <div id="root"></div>
+
+    <!-- FIXED: Only ONE valid entry point -->
     <script type="module" src="/src/index.tsx"></script>
-  <script type="module" src="/src/index.tsx"></script>
-</body>
+  </body>
 </html>
