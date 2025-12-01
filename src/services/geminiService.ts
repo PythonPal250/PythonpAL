@@ -1,98 +1,105 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import {
-  Message,
-  Job,
-  Project,
-  Challenge,
-  EvaluationResult,
-  Language,
-  DebugResult,
-  LintIssue,
-} from '../types';
+import { GoogleGenAI, Type } from "@google/genai";
+import { Message, Project, Language } from "../types";
 
-// The API key is injected at build time by Vite (see vite.config.ts).
-// On Vercel / in .env, define GEMINI_API_KEY and it will be mapped
-// to process.env.API_KEY during the build.
-const apiKey = process.env.API_KEY as string;
+type ImagePart = { mimeType: string; data: string };
 
-if (!apiKey) {
-  throw new Error(
-    'API_KEY environment variable not set. Make sure GEMINI_API_KEY is configured in Vercel / .env.'
-  );
+// Read API key from Vite env (client-side safe for now for your demo)
+const apiKey =
+  import.meta.env.VITE_GEMINI_API_KEY ||
+  import.meta.env.VITE_API_KEY ||
+  "";
+
+// We create the client lazily so just importing this file
+// does NOT immediately throw and break the whole app.
+let client: GoogleGenAI | null = null;
+
+function getClient(): GoogleGenAI {
+  if (!apiKey) {
+    throw new Error(
+      "Missing Gemini API key. Set VITE_GEMINI_API_KEY in your Vercel environment."
+    );
+  }
+  if (!client) {
+    client = new GoogleGenAI({ apiKey });
+  }
+  return client;
 }
 
-const ai = new GoogleGenAI({ apiKey });
+const getModelName = (isThinkingMode: boolean) =>
+  isThinkingMode ? "gemini-2.5-pro" : "gemini-2.5-flash";
 
-const getModelId = (isThinkingMode: boolean) =>
-  isThinkingMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+function toGenAiContents(history: Message[], image?: ImagePart) {
+  return history.map((msg) => ({
+    role: msg.role,
+    parts: msg.parts.flatMap((part) => {
+      const partsArr: any[] = [];
+      if (part.text) partsArr.push({ text: part.text });
+      if (part.image?.inlineData) {
+        partsArr.push({ inlineData: { ...part.image.inlineData } });
+      }
+      return partsArr;
+    }),
+  }));
+}
 
-export const getChatResponse = async (
+// --- Chat ---
+
+export async function* getChatResponseStream(
   prompt: string,
   history: Message[],
   systemInstruction: string,
-  image?: { mimeType: string; data: string },
+  image?: ImagePart,
   isThinkingMode = false
-): Promise<string> => {
-  try {
-    const model = getModelId(isThinkingMode);
+): AsyncGenerator<string, void, unknown> {
+  const model = getModelName(isThinkingMode);
+  const contents = toGenAiContents(history, image);
 
-    const contents = history.map((msg) => ({
-      role: msg.role,
-      parts: msg.parts.flatMap((part) => {
-        const apiParts: any[] = [];
-
-        if (part.text) {
-          apiParts.push({ text: part.text });
-        }
-        if (part.image?.inlineData) {
-          apiParts.push({ inlineData: { ...part.image.inlineData } });
-        }
-        return apiParts;
-      }),
-    }));
-
-    const config: any = {
-      systemInstruction,
-    };
-
-    if (isThinkingMode) {
-      config.thinkingConfig = { thinkingBudget: 32768 };
-    }
-
-    const response = await ai.models.generateContent({
-      model,
-      contents,
-      config,
-    });
-
-    // In the new @google/genai SDK, `text` is usually a method.
-    const text =
-      typeof (response as any).text === 'function'
-        ? (response as any).text()
-        : (response as any).text;
-
-    return (text ?? '').toString();
-  } catch (error) {
-    console.error('Error in getChatResponse:', error);
-    throw error;
+  const config: any = { systemInstruction };
+  if (isThinkingMode) {
+    config.thinkingConfig = { thinkingBudget: 32768 };
   }
-};
 
-export const findProjects = async (
+  const ai = getClient();
+
+  // We call the non-streaming API once, then "fake-stream" chunks of text
+  // so that `for await ... of getChatResponseStream(...)` still works.
+  const response: any = await ai.models.generateContent({
+    model,
+    contents,
+    config,
+  });
+
+  const fullText: string =
+    typeof response.text === "function"
+      ? response.text()
+      : typeof response.response?.text === "function"
+      ? response.response.text()
+      : (response.text as string) ?? "";
+
+  const chunks = fullText.split(/(\s+)/); // keep spaces
+  for (const chunk of chunks) {
+    if (!chunk) continue;
+    yield chunk;
+  }
+}
+
+// --- Projects tab ---
+
+export async function findProjects(
   history: Message[],
   systemInstruction: string,
   language: Language
-): Promise<Project[]> => {
+): Promise<Project[]> {
   try {
-    const model = 'gemini-2.5-flash';
+    const ai = getClient();
 
-    const contents = [
+    const contents: any[] = [
       ...history.map((msg) => ({
         role: msg.role,
         parts: msg.parts.map((part) => ({ text: part.text })),
       })),
       {
-        role: 'user',
+        role: "user",
         parts: [
           {
             text: `Based on our conversation about my ${language} skills and interests, please generate 12 relevant project ideas, covering a mix of Beginner, Intermediate, and Advanced difficulty levels.`,
@@ -109,45 +116,44 @@ export const findProjects = async (
           items: {
             type: Type.OBJECT,
             properties: {
+              id: { type: Type.STRING },
               title: { type: Type.STRING },
               description: { type: Type.STRING },
               skills: { type: Type.ARRAY, items: { type: Type.STRING } },
-              difficulty: {
-                type: Type.STRING,
-                enum: ['Beginner', 'Intermediate', 'Advanced'],
-              },
+              difficulty: { type: Type.STRING },
+              githubTemplate: { type: Type.STRING },
             },
-            required: ['title', 'description', 'skills', 'difficulty'],
+            required: ["title", "description", "skills", "difficulty"],
           },
         },
       },
-      required: ['projects'],
+      required: ["projects"],
     };
 
-    const response = await ai.models.generateContent({
-      model,
+    const response: any = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
       contents,
       config: {
-        responseMimeType: 'application/json',
-        responseSchema,
         systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema,
       },
     });
 
-    const text =
-      typeof (response as any).text === 'function'
-        ? (response as any).text()
-        : (response as any).text;
+    const jsonText: string =
+      typeof response.text === "function"
+        ? response.text()
+        : typeof response.response?.text === "function"
+        ? response.response.text()
+        : (response.text as string) ?? "";
 
-    const jsonString = (text ?? '').toString().trim();
-    const data = JSON.parse(jsonString);
-    return data.projects ?? [];
-  } catch (error) {
-    console.error('Error in findProjects:', error);
+    const data = JSON.parse(jsonText);
+    return (data.projects || []).map((p: any, idx: number) => ({
+      id: p.id ?? `project-${idx + 1}`,
+      ...p,
+    }));
+  } catch (err) {
+    console.error("Error in findProjects:", err);
     return [];
   }
-};
-
-// The rest of your helpers (getJobSearchLinks, parseJobListings, getCodingChallenge,
-// evaluateCodeSolution, scanForInputRequirements, runCode, formatCode, getCodeCompletions,
-// debugCode, lintCode, generateTests) can stay as you already have them.
+}
